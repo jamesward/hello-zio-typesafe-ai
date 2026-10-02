@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "sbt-mcp-hello-zio-typesafe-ai": {
+      "type": "http",
+      "url": "http://127.0.0.1:5105/",
+      "timeout": 1800000,
+      "disabled": false
+    }
+  }
+}
