@@ -1,11 +1,11 @@
 name := "hello-zio-typesafe-ai"
 
-scalaVersion := "3.9.0"
+scalaVersion := "3.10.0"
 
 libraryDependencies ++= Seq(
   "com.jamesward" %% "zio-bedrock" % "0.1.0",
   "com.jamesward" %% "zio-typesafe-ai" % "0.1.0",
-  "com.jamesward" %% "zio-http-mcp" % "0.8.3",
+  "com.jamesward" %% "zio-http-mcp" % "0.9.0",
 
   "dev.zio" %% "zio-test" % "2.1.26" % Test,
   "dev.zio" %% "zio-test-sbt" % "2.1.26" % Test,
@@ -21,4 +21,4 @@ ThisBuild / mcpPort := 5105
 // SkillsJars: extract agent Skills with `./sbt extractSkillsJars`
 skillsJarsOutputDir := Some(file(".kiro/skills"))
 
-libraryDependencies += "com.jamesward" % "skills" % "0.0.11" % Skills
+libraryDependencies += "com.jamesward" % "skills" % "0.0.13" % Skills
