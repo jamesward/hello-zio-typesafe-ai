@@ -14,7 +14,7 @@ The experiments compare controller behavior, filtering and fanout safety, MCP us
    ```
 1. Run the LLM Loop:
    ```bash
-   ./sbt "run llm-loop"
+   ./sbta "run llm-loop"
    ```
 1. [Create a TypeSafe API Key](https://console.typesafe.ai/keys)
 1. Setup TypeSafe configuration:
@@ -23,12 +23,12 @@ The experiments compare controller behavior, filtering and fanout safety, MCP us
    ```
 1. Run an experiment:
    ```bash
-   ./sbt "run jev-tool jev-filters"
-   ./sbt "run jev-tool llm-filters"
-   ./sbt "run jev-loop plan"
-   ./sbt "run jev-loop no-plan"
-   ./sbt "run jev-loop plan-llm-filters"
-   ./sbt "run jev-loop no-plan-llm-filters"
+   ./sbta "run jev-tool jev-filters"
+   ./sbta "run jev-tool llm-filters"
+   ./sbta "run jev-loop plan"
+   ./sbta "run jev-loop no-plan"
+   ./sbta "run jev-loop plan-llm-filters"
+   ./sbta "run jev-loop no-plan-llm-filters"
    ```
 
 
@@ -98,7 +98,7 @@ Every production Jev client in `jev-tool` and `jev-loop` uses `TypeSafeAI.Client
 For temporary wire-level diagnosis, exact lowercase `JEV_FULL_EXCHANGE_LOGS=true` restores TypeSafeAI's complete request-body and canonical response-body logger:
 
 ```bash
-JEV_FULL_EXCHANGE_LOGS=true ./sbt "run jev-loop no-plan"
+JEV_FULL_EXCHANGE_LOGS=true ./sbta "run jev-loop no-plan"
 ```
 
 Neither logger captures HTTP headers, so bearer-token headers remain excluded. Full bodies can still contain sensitive application state and answers; compact mode should remain the normal setting. Generic plan mode also retains `Content`-only planning audit snapshots, while no-plan retains the corresponding runtime action audit. CLI output includes the mode's workflow and action/continuation trace.
@@ -108,7 +108,7 @@ Neither logger captures HTTP headers, so bearer-token headers remain excluded. F
 The default test run is deterministic and credential-free:
 
 ```bash
-./sbt test
+./sbta test
 ```
 
 The suite covers catalog-derived synthetic inputs, exact-input evidence-only Jev delegation with zero inner LLM calls, visible Jev-capacity failure, predicate validation and full ordered evaluation, last-item matches, `TooBroad` refinement, `NoMatches` replacement, `NoProgress`, repeated predicates, independent filter/recovery exhaustion, request guard secrecy, raw fanout rejection, static-bound authorization and output violations, fanout output shape, plan-before-execute ordering, action execution between no-plan decisions, checkpoint no-replay, recovery-versus-replan accounting, physical MCP boundary counts, equivalent evidence/summaries, common metric keys/counts, and CLI defaults.
