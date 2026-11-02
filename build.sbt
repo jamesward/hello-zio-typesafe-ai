@@ -4,7 +4,7 @@ scalaVersion := "3.10.0"
 
 libraryDependencies ++= Seq(
   "com.jamesward" %% "zio-bedrock" % "0.1.0",
-  "com.jamesward" %% "zio-typesafe-ai" % "0.1.0",
+  "com.jamesward" %% "zio-decisions" % "0.2.0",
   "com.jamesward" %% "zio-http-mcp" % "0.12.0",
 
   "dev.zio" %% "zio-test" % "2.1.27" % Test,

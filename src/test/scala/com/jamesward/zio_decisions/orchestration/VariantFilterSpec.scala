@@ -1,13 +1,13 @@
-package com.jamesward.zio_typesafe_ai.orchestration
+package com.jamesward.zio_decisions.orchestration
 
-import com.jamesward.zio_typesafe_ai.{AppTypeSafeAIMock, TypeSafeAI}
-import com.jamesward.zio_typesafe_ai.TypeSafeAI.Client
+import com.jamesward.zio_decisions.{AppTypeSafeMock, Decisions}
+import com.jamesward.zio_decisions.DecisionModel
 import zio.*
 import zio.json.*
 import zio.json.ast.Json
 import zio.test.*
 
-object JevVariantFilterSpec extends ZIOSpecDefault:
+object VariantFilterSpec extends ZIOSpecDefault:
   private val string = Json.Obj("type" -> Json.Str("string"))
   private val itemSchema = Json.Obj(
     "type" -> Json.Str("object"),
@@ -21,7 +21,7 @@ object JevVariantFilterSpec extends ZIOSpecDefault:
         Json.Obj("name" -> Json.Str("Target"), "kind" -> Json.Str("Class")),
         Json.Obj("name" -> Json.Str("Target"), "kind" -> Json.Str("CLASS")),
       )
-      val prepared = JevVariantFilter.prepare(source, itemSchema)
+      val prepared = VariantFilter.prepare(source, itemSchema)
       val selected = prepared.variants.filter(_.projection.toJson.toLowerCase.contains("target")).map(_.projection)
       val predicate = PredicateFilter.variantMembership(prepared.paths, selected)
       val evaluation = PredicateFilter.classify(source, predicate, hostGuard = 10).toOption.get
@@ -38,16 +38,16 @@ object JevVariantFilterSpec extends ZIOSpecDefault:
       val source = Vector.tabulate(3)(index => Json.Obj(
         "name" -> Json.Str(s"item-$index"), "kind" -> Json.Str("CLASS"),
       ))
-      val prepared = JevVariantFilter.prepare(source, itemSchema)
-      import AppTypeSafeAIMock.ScriptedResponse
+      val prepared = VariantFilter.prepare(source, itemSchema)
+      import AppTypeSafeMock.ScriptedResponse
       for
-        observed <- AppTypeSafeAIMock.scriptedObserved(
+        observed <- AppTypeSafeMock.scriptedObserved(
           ScriptedResponse.Nouls(Vector(0.1, 0.9)),
           ScriptedResponse.Nouls(Vector(0.1, 0.9, 0.9)),
         )
-        client <- ZIO.service[Client].provideLayer(observed.layer)
-        tracker <- JevFilterTracker.make
-        selection <- JevVariantFilter.select(
+        client <- ZIO.service[DecisionModel].provideLayer(observed.layer)
+        tracker <- DecisionFilterTracker.make
+        selection <- VariantFilter.select(
           "select items one and two", prepared, client,
           tracker, maxParallelism = 2, PredicateFilter.SynthesisRequest("select", itemSchema, None, None),
         )
@@ -57,7 +57,7 @@ object JevVariantFilterSpec extends ZIOSpecDefault:
       yield assertTrue(
         selection.batchCount == 2,
         evaluation.matches == source.drop(1),
-        metrics == JevFilterMetrics(calls = 2, inputTokens = 5, outputTokens = 5, timeMs = metrics.timeMs),
+        metrics == DecisionFilterMetrics(calls = 2, inputTokens = 5, outputTokens = 5, timeMs = metrics.timeMs),
         bodies.lift(1).exists(body => body.toJson.contains("/name") && !body.toJson.contains("/kind")),
       )
     },
@@ -65,12 +65,12 @@ object JevVariantFilterSpec extends ZIOSpecDefault:
       val source = Vector.tabulate(256)(index => Json.Obj(
         "name" -> Json.Str(s"variant-$index"), "kind" -> Json.Str("CLASS"),
       ))
-      val prepared = JevVariantFilter.prepare(source, itemSchema)
+      val prepared = VariantFilter.prepare(source, itemSchema)
       for
-        observed <- AppTypeSafeAIMock.noulObserved(_ => 0.9)
-        client <- ZIO.service[Client].provideLayer(observed.layer)
-        tracker <- JevFilterTracker.make
-        selection <- JevVariantFilter.select(
+        observed <- AppTypeSafeMock.noulObserved(_ => 0.9)
+        client <- ZIO.service[DecisionModel].provideLayer(observed.layer)
+        tracker <- DecisionFilterTracker.make
+        selection <- VariantFilter.select(
           "select every variant", prepared, client, tracker,
           maxParallelism = 2, PredicateFilter.SynthesisRequest("select", itemSchema, None, None),
         )
@@ -93,9 +93,9 @@ object JevVariantFilterSpec extends ZIOSpecDefault:
         ),
         "kind" -> Json.Str("CLASS"),
       ))
-      val prepared = JevVariantFilter.prepare(source, itemSchema)
+      val prepared = VariantFilter.prepare(source, itemSchema)
       for
-        observed <- AppTypeSafeAIMock.noulObservedForRequest: (body, index) =>
+        observed <- AppTypeSafeMock.noulObservedForRequest: (body, index) =>
           val mode = body.asObject.flatMap(_.get("state")).flatMap(_.asObject)
             .flatMap(_.get("filterMode")).flatMap(_.asString).getOrElse("")
           mode match
@@ -103,9 +103,9 @@ object JevVariantFilterSpec extends ZIOSpecDefault:
             case "variant_recall"       => if index < 3 then 0.9 else 0.1
             case "variant_consolidation" => if index == 1 then 0.9 else 0.1
             case _                       => 0.1
-        client <- ZIO.service[Client].provideLayer(observed.layer)
-        tracker <- JevFilterTracker.make
-        selection <- JevVariantFilter.select(
+        client <- ZIO.service[DecisionModel].provideLayer(observed.layer)
+        tracker <- DecisionFilterTracker.make
+        selection <- VariantFilter.select(
           "select central variants", prepared, client, tracker, maxParallelism = 2,
           PredicateFilter.SynthesisRequest("select", itemSchema, None, None),
         )
@@ -129,22 +129,22 @@ object JevVariantFilterSpec extends ZIOSpecDefault:
         "name" -> Json.Str(if index % 50 == 0 then s"polymorphic-validator-$index" else s"ordinary-$index"),
         "kind" -> Json.Str("CLASS"),
       ))
-      val prepared = JevVariantFilter.prepare(source, itemSchema)
-      val first = JevVariantFilter.llmEvidence("polymorphic validation", source.size, prepared)
-      val second = JevVariantFilter.llmEvidence("polymorphic validation", source.size, prepared)
+      val prepared = VariantFilter.prepare(source, itemSchema)
+      val first = VariantFilter.llmEvidence("polymorphic validation", source.size, prepared)
+      val second = VariantFilter.llmEvidence("polymorphic validation", source.size, prepared)
       assertTrue(
         first == second,
         first.sourceCount == 400,
         first.variantCount == 400,
         !first.complete,
-        first.variants.elements.size == JevVariantFilter.MaxLlmEvidenceVariants,
+        first.variants.elements.size == VariantFilter.MaxLlmEvidenceVariants,
         first.variants.toJson.contains("polymorphic-validator"),
         first.strategy == "prompt-linked-plus-stable-uniform",
-        OrchestrationConfig().jevFilterVariantThreshold == 255,
-        JevVariantFilter.route(255, 255) == JevVariantFilter.Route.Jev,
-        JevVariantFilter.route(256, 255) == JevVariantFilter.Route.Llm,
-        JevVariantFilter.route(256, 300) == JevVariantFilter.Route.Jev,
-        JevVariantFilter.route(301, 300) == JevVariantFilter.Route.Llm,
+        OrchestrationConfig().decisionFilterVariantThreshold == 255,
+        VariantFilter.route(255, 255) == VariantFilter.Route.Decisions,
+        VariantFilter.route(256, 255) == VariantFilter.Route.Llm,
+        VariantFilter.route(256, 300) == VariantFilter.Route.Decisions,
+        VariantFilter.route(301, 300) == VariantFilter.Route.Llm,
       )
     },
   )

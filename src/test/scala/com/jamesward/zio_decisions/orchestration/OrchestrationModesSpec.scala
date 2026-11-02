@@ -1,10 +1,10 @@
-package com.jamesward.zio_typesafe_ai.orchestration
+package com.jamesward.zio_decisions.orchestration
 
-import com.jamesward.zio_typesafe_ai.{AppTypeSafeAIMock, TypeSafeAI}
-import com.jamesward.zio_typesafe_ai.TypeSafeAI.*
+import com.jamesward.zio_decisions.{AppTypeSafeMock, Decisions}
+import com.jamesward.zio_decisions.Decisions.*
 import com.jamesward.ziohttp.mcp.{CallToolResult, ToolDefinition, ToolName}
-import com.jamesward.zio_typesafe_ai.orchestration.model.*
-import com.jamesward.zio_typesafe_ai.orchestration.runtime.*
+import com.jamesward.zio_decisions.orchestration.model.*
+import com.jamesward.zio_decisions.orchestration.runtime.*
 import zio.*
 import zio.json.*
 import zio.json.ast.Json
@@ -32,7 +32,7 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
 
   private def run(mode: OrchestrationMode): Task[Run] =
     for
-      observed <- AppTypeSafeAIMock.choicesObserved("c000", "c000", "c000")
+      observed <- AppTypeSafeMock.choicesObserved("c000", "c000", "c000")
       calls <- Ref.make(0)
       evidence <- Ref.make(Json.Arr())
       llm <- InternalLlmInvoker.make(new LlmTransport:
@@ -46,7 +46,7 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
       result <- McpOrchestrator.runMode(
         "fetch an answer", Chunk(definition),
         operations,
-        llm, mode, OrchestrationConfig(jevFilterVariantThreshold = 0, maxOperations = 1, maxIterations = 3),
+        llm, mode, OrchestrationConfig(decisionFilterVariantThreshold = 0, maxOperations = 1, maxIterations = 3),
       ).provideLayer(observed.layer)
       captured <- evidence.get
       count <- calls.get
@@ -83,9 +83,9 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
         ToolDefinition(ToolName("inspect"), Some("inspect one variant"), inspectInput, Some(output)),
       )
       val source = Vector.tabulate(3)(index => Json.Obj("id" -> Json.Str(s"item-$index")))
-      import AppTypeSafeAIMock.ScriptedResponse
+      import AppTypeSafeMock.ScriptedResponse
       for
-        observed <- AppTypeSafeAIMock.scriptedObserved(
+        observed <- AppTypeSafeMock.scriptedObserved(
           ScriptedResponse.Choice("c000"),
           ScriptedResponse.Choice("c000"),
           ScriptedResponse.Nouls(Vector(0.9)),
@@ -118,9 +118,9 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
         calls == Vector("item-1"),
         result.finalText == "Jev-filtered answer",
         result.internalLlm.filterCount == 0,
-        result.metrics.jevFilterCalls == 2,
-        result.metrics.jevFilterInputTokens == 4,
-        result.metrics.jevLogicalTurns == 5,
+        result.metrics.decisionFilterCalls == 2,
+        result.metrics.decisionFilterInputTokens == 4,
+        result.metrics.decisionLogicalTurns == 5,
         result.workflow.steps.exists {
           case Step.Filter(_, _, _, _, Expr.Ref(_, _)) => true
           case _                                       => false
@@ -168,9 +168,9 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
         ToolDefinition(ToolName("inspect"), Some("inspect one record"), inspectInput, Some(output)),
       )
       val source = Vector.tabulate(3)(index => Json.Obj("id" -> Json.Str(s"item-$index")))
-      import AppTypeSafeAIMock.ScriptedResponse
+      import AppTypeSafeMock.ScriptedResponse
       for
-        observed <- AppTypeSafeAIMock.scriptedObserved(
+        observed <- AppTypeSafeMock.scriptedObserved(
           ScriptedResponse.Choice("c000"),
           ScriptedResponse.Choice("c000"),
           ScriptedResponse.Nouls(Vector(0.9)),
@@ -195,7 +195,7 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
           Json.Obj("query" -> Json.Str("target")),
           inputSchema,
           operations,
-          OrchestrationConfig(jevFilterVariantThreshold = 10, maxOperations = 2, maxIterations = 4),
+          OrchestrationConfig(decisionFilterVariantThreshold = 10, maxOperations = 2, maxIterations = 4),
         ).provideLayer(observed.layer)
         invoked <- calls.get
       yield assertTrue(
@@ -205,8 +205,8 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
         result.evidence.elements.size == 2,
         result.evidence.toJson.contains("HostFiltered"),
         result.evidence.toJson.contains("detail:item-1"),
-        result.metrics.jevLogicalTurns == 4,
-        result.metrics.jevFilterCalls == 2,
+        result.metrics.decisionLogicalTurns == 4,
+        result.metrics.decisionFilterCalls == 2,
         result.metrics.extractCalls == 0,
         result.metrics.filterCalls == 0,
         result.metrics.summaryCalls == 0,
@@ -231,9 +231,9 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
         ToolName("enumerate"), Some("enumerate records"), inputSchema, Some(enumerateOutput),
       ))
       for
-        observed <- AppTypeSafeAIMock.scriptedObserved(
-          AppTypeSafeAIMock.ScriptedResponse.Choice("c000"),
-          AppTypeSafeAIMock.ScriptedResponse.Choice("c000"),
+        observed <- AppTypeSafeMock.scriptedObserved(
+          AppTypeSafeMock.ScriptedResponse.Choice("c000"),
+          AppTypeSafeMock.ScriptedResponse.Choice("c000"),
         )
         operations <- McpOperationInvoker.make(definitions, new RawMcpInvoker:
           def call(operation: String, arguments: Json.Obj) = ZIO.succeed(CallToolResult(
@@ -250,17 +250,17 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
           Json.Obj(),
           inputSchema,
           operations,
-          OrchestrationConfig(jevFilterVariantThreshold = 0, maxOperations = 1, maxIterations = 3),
+          OrchestrationConfig(decisionFilterVariantThreshold = 0, maxOperations = 1, maxIterations = 3),
         ).provideLayer(observed.layer).exit
       yield assertTrue(
-        exit.causeOption.flatMap(_.failureOption).exists(_.isInstanceOf[JevFilterCapacityExceeded]),
+        exit.causeOption.flatMap(_.failureOption).exists(_.isInstanceOf[DecisionFilterCapacityExceeded]),
       )
     },
     test("no-plan returns a failed MCP invocation to Jev and continues with another action") {
       val fail = ToolDefinition(ToolName("a_fail"), Some("always fails"), emptyInput, Some(output))
       val good = ToolDefinition(ToolName("b_good"), Some("returns evidence"), emptyInput, Some(output))
       for
-        observed <- AppTypeSafeAIMock.choicesObserved("c000", "c000", "c000", "c000")
+        observed <- AppTypeSafeMock.choicesObserved("c000", "c000", "c000", "c000")
         calls <- Ref.make(Vector.empty[String])
         llm <- InternalLlmInvoker.make(new LlmTransport:
           def extract(request: ExtractionRequest) = ZIO.succeed(LlmResult(Json.Obj()))
@@ -273,7 +273,7 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
         )
         result <- McpOrchestrator.runMode(
           "recover from one operation", Chunk(fail, good), operations, llm, OrchestrationMode.NoPlan,
-          OrchestrationConfig(jevFilterVariantThreshold = 0, maxOperations = 2, maxRecoveries = 0, maxIterations = 4),
+          OrchestrationConfig(decisionFilterVariantThreshold = 0, maxOperations = 2, maxRecoveries = 0, maxIterations = 4),
         ).provideLayer(observed.layer)
         invoked <- calls.get
         bodies <- observed.requestBodies
@@ -296,8 +296,8 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
         plan.evidence == noPlan.evidence,
         plan.result.finalText == noPlan.result.finalText,
         plan.result.metrics.toJson.fields.map(_._1).toSet == noPlan.result.metrics.toJson.fields.map(_._1).toSet,
-        plan.result.metrics.jevLogicalTurns == 3,
-        noPlan.result.metrics.jevLogicalTurns == 3,
+        plan.result.metrics.decisionLogicalTurns == 3,
+        noPlan.result.metrics.decisionLogicalTurns == 3,
         plan.result.metrics.mcpPhysicalCalls == 1,
         noPlan.result.metrics.mcpPhysicalCalls == 1,
         plan.result.metrics.summaryCalls == 1,
@@ -324,9 +324,9 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
           case _                             => ZIO.unit
         result <- McpOrchestrator.runMode(
           "fetch an answer", Chunk(definition), operations, llm, OrchestrationMode.Plan,
-          OrchestrationConfig(jevFilterVariantThreshold = 0, maxOperations = 1, maxIterations = 3, maxRecoveries = 1),
+          OrchestrationConfig(decisionFilterVariantThreshold = 0, maxOperations = 1, maxIterations = 3, maxRecoveries = 1),
           planningObserver = observer,
-        ).provideLayer(AppTypeSafeAIMock.choices("c000", "c000", "c000"))
+        ).provideLayer(AppTypeSafeMock.choices("c000", "c000", "c000"))
         seen <- events.get
       yield assertTrue(
         seen == Vector("plan-complete", "mcp:1", "mcp:2"),
@@ -367,8 +367,8 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
         )
         result <- McpOrchestrator.runMode(
           "use both capabilities", Chunk(alpha, beta), operations, llm, mode,
-          OrchestrationConfig(jevFilterVariantThreshold = 0, maxOperations = 2, maxIterations = 4, maxParallelism = 1, maxRecoveries = 1),
-        ).provideLayer(AppTypeSafeAIMock.choices("c000", "c000", "c000", "c000")).either
+          OrchestrationConfig(decisionFilterVariantThreshold = 0, maxOperations = 2, maxIterations = 4, maxParallelism = 1, maxRecoveries = 1),
+        ).provideLayer(AppTypeSafeMock.choices("c000", "c000", "c000", "c000")).either
         counts <- attempts.get
       yield result -> counts
 
@@ -448,7 +448,7 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
       ))
 
       for
-        observed <- AppTypeSafeAIMock.choicesObserved("c000", "c000", "c001", "c000", "c002", "c002", "c000")
+        observed <- AppTypeSafeMock.choicesObserved("c000", "c000", "c001", "c000", "c002", "c002", "c000")
         filterCalls <- Ref.make(0)
         filterRequests <- Ref.make(Vector.empty[PredicateFilter.SynthesisRequest])
         inspectCalls <- Ref.make(Vector.empty[(String, String)])
@@ -474,7 +474,7 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
         )
         result <- McpOrchestrator.runMode(
           "inspect the target B record", definitions, operations, llm, OrchestrationMode.NoPlan,
-          OrchestrationConfig(jevFilterVariantThreshold = 0, maxOperations = 2, hostGuard = 2, maxFilterAttempts = 2, maxRecoveries = 1, maxIterations = 7),
+          OrchestrationConfig(decisionFilterVariantThreshold = 0, maxOperations = 2, hostGuard = 2, maxFilterAttempts = 2, maxRecoveries = 1, maxIterations = 7),
         ).provideLayer(observed.layer)
         bodies <- observed.requestBodies
         requests <- filterRequests.get
@@ -554,7 +554,7 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
       val source = Vector.tabulate(5)(index => Json.Obj("id" -> Json.Str(s"private-$index")))
 
       for
-        observed <- AppTypeSafeAIMock.choicesObserved("c000", "c000", "c000", "c001", "c001", "c000")
+        observed <- AppTypeSafeMock.choicesObserved("c000", "c000", "c000", "c001", "c001", "c000")
         filterCalls <- Ref.make(0)
         inspectCalls <- Ref.make(Vector.empty[String])
         requests <- Ref.make(Vector.empty[PredicateFilter.SynthesisRequest])
@@ -576,7 +576,7 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
         )
         result <- McpOrchestrator.runMode(
           "inspect one matching record", definitions, operations, llm, OrchestrationMode.NoPlan,
-          OrchestrationConfig(jevFilterVariantThreshold = 0, maxOperations = 2, hostGuard = 2, maxFilterAttempts = 2, maxRecoveries = 1, maxIterations = 6),
+          OrchestrationConfig(decisionFilterVariantThreshold = 0, maxOperations = 2, hostGuard = 2, maxFilterAttempts = 2, maxRecoveries = 1, maxIterations = 6),
         ).provideLayer(observed.layer)
         bodies <- observed.requestBodies
         generated <- filterCalls.get
@@ -644,7 +644,7 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
         Json.Obj("id" -> Json.Str(if index < 4 then s"keep-$index" else s"outside-$index"))
 
       for
-        observed <- AppTypeSafeAIMock.choicesObserved("c000", "c000", "c000", "c000", "c000", "c001", "c001", "c000")
+        observed <- AppTypeSafeMock.choicesObserved("c000", "c000", "c000", "c000", "c000", "c001", "c001", "c000")
         inspectCalls <- Ref.make(Vector.empty[String])
         filterRequests <- Ref.make(Vector.empty[PredicateFilter.SynthesisRequest])
         inspectionsAtFilter <- Ref.make(Vector.empty[Int])
@@ -672,7 +672,7 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
         )
         result <- McpOrchestrator.runMode(
           "inspect the matching symbol", definitions, operations, llm, OrchestrationMode.NoPlan,
-          OrchestrationConfig(jevFilterVariantThreshold = 0, maxOperations = 2, hostGuard = 2, maxFilterAttempts = 4, maxRecoveries = 3, maxIterations = 8),
+          OrchestrationConfig(decisionFilterVariantThreshold = 0, maxOperations = 2, hostGuard = 2, maxFilterAttempts = 4, maxRecoveries = 3, maxIterations = 8),
         ).provideLayer(observed.layer)
         requests <- filterRequests.get
         callsWhenFiltering <- inspectionsAtFilter.get
@@ -727,7 +727,7 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
       val source = Vector.tabulate(9)(index => Json.Obj("id" -> Json.Str(s"budget-$index")))
 
       def budgetRun(maxFilterAttempts: Int, maxRecoveries: Int) = for
-        observed <- AppTypeSafeAIMock.choicesObserved("c000", "c000", "c000", "c000", "c000")
+        observed <- AppTypeSafeMock.choicesObserved("c000", "c000", "c000", "c000", "c000")
         filterCalls <- Ref.make(0)
         summaryEvidence <- Ref.make(Json.Arr())
         llm <- InternalLlmInvoker.make(new LlmTransport:
@@ -746,7 +746,7 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
         )
         result <- McpOrchestrator.runMode(
           "inspect a symbol", Chunk(enumerate), operations, llm, OrchestrationMode.NoPlan,
-          OrchestrationConfig(jevFilterVariantThreshold = 0, maxOperations = 1, hostGuard = 2, maxFilterAttempts = maxFilterAttempts, maxRecoveries = maxRecoveries, maxIterations = 5),
+          OrchestrationConfig(decisionFilterVariantThreshold = 0, maxOperations = 1, hostGuard = 2, maxFilterAttempts = maxFilterAttempts, maxRecoveries = maxRecoveries, maxIterations = 5),
         ).provideLayer(observed.layer)
         bodies <- observed.requestBodies
         calls <- filterCalls.get
@@ -805,7 +805,7 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
       )
 
       for
-        observed <- AppTypeSafeAIMock.choicesObserved("c000", "c000", "c000", "c001", "c000", "c001", "c001", "c000")
+        observed <- AppTypeSafeMock.choicesObserved("c000", "c000", "c000", "c001", "c000", "c001", "c001", "c000")
         calls <- Ref.make(Vector.empty[(String, Json.Obj)])
         filterRequests <- Ref.make(Vector.empty[PredicateFilter.SynthesisRequest])
         summaryEvidence <- Ref.make(Json.Arr())
@@ -833,7 +833,7 @@ object OrchestrationModesSpec extends ZIOSpecDefault:
         )
         result <- McpOrchestrator.runMode(
           "find and inspect the target generic record", definitions, operations, llm, OrchestrationMode.NoPlan,
-          OrchestrationConfig(jevFilterVariantThreshold = 0, maxOperations = 4, hostGuard = 2, maxIterations = 8),
+          OrchestrationConfig(decisionFilterVariantThreshold = 0, maxOperations = 4, hostGuard = 2, maxIterations = 8),
         ).provideLayer(observed.layer)
         recorded <- calls.get
         requests <- filterRequests.get

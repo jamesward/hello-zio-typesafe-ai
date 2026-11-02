@@ -1,8 +1,9 @@
 import benchmark.javadocs.JacksonJavadocsBenchmark as Benchmark
 import com.jamesward.zio_bedrock.{Bedrock, Converse}
 import com.jamesward.zio_bedrock.Bedrock.*
-import com.jamesward.zio_typesafe_ai.TypeSafeAI
-import com.jamesward.zio_typesafe_ai.orchestration
+import com.jamesward.zio_decisions.{DecisionModel, Decisions}
+import com.jamesward.zio_decisions.typesafe.TypeSafe
+import com.jamesward.zio_decisions.orchestration
 import com.jamesward.ziohttp.mcp.{CallToolResult, ToolDefinition}
 import com.jamesward.ziohttp.mcp.client.McpClient
 import zio.*
@@ -18,8 +19,8 @@ object Main extends ZIOAppDefault:
 
   private def loggedTypeSafeAIClient(
     fullBodies: Boolean
-  ): ZLayer[HttpClient, TypeSafeAI.Error, TypeSafeAI.Client] =
-    TypeSafeAI.Client.live >>> TypeSafeAI.Client.observed(orchestration.JevExchangeLogger.selected(fullBodies))
+  ): ZLayer[HttpClient, Decisions.Error, DecisionModel] =
+    TypeSafe.live >>> DecisionModel.observed(orchestration.ExchangeLogger.selected(fullBodies))
 
   private def printMetrics(result: DynamicLoopResult[String], label: String): UIO[Unit] =
     ZIO.foreachDiscard(result.turns): turn =>
@@ -120,7 +121,7 @@ object Main extends ZIOAppDefault:
 
   private def jevToolProgram(filterMode: orchestration.EvidenceFilterMode) = ZIO.scoped:
     val filterModeName = filterMode match
-      case orchestration.EvidenceFilterMode.Jev => "jev-filters"
+      case orchestration.EvidenceFilterMode.Decisions => "jev-filters"
       case orchestration.EvidenceFilterMode.Llm => "llm-filters"
     for
       fullBodies <- zio.System.env("JEV_FULL_EXCHANGE_LOGS").map(_.contains("true"))
@@ -141,15 +142,15 @@ object Main extends ZIOAppDefault:
             .unless(name == syntheticTool.name)
           input <- ZIO.fromEither(toolInput.asJsonObject).mapError(IllegalArgumentException(_))
           operationInvoker <- orchestration.McpOperationInvoker.fromClient(definitions, mcp)
-          baseJevClient <- ZIO.service[TypeSafeAI.Client]
-          tracker <- orchestration.JevPhysicalTracker.make
-          exchangeLogger = orchestration.JevExchangeLogger.selected(fullBodies)
-          combinedObserver = TypeSafeAI.ExchangeObserver.fromFunction(observation =>
+          baseJevClient <- ZIO.service[DecisionModel]
+          tracker <- orchestration.DecisionPhysicalTracker.make
+          exchangeLogger = orchestration.ExchangeLogger.selected(fullBodies)
+          combinedObserver = Decisions.ExchangeObserver.fromFunction(observation =>
             exchangeLogger.observe(observation) *> tracker.observer.observe(observation)
           )
-          invocationJevLayer = ZLayer.succeed(baseJevClient) >>> TypeSafeAI.Client.observed(combinedObserver)
+          invocationJevLayer = ZLayer.succeed(baseJevClient) >>> DecisionModel.observed(combinedObserver)
           filterLlm <- filterMode match
-            case orchestration.EvidenceFilterMode.Jev => ZIO.none
+            case orchestration.EvidenceFilterMode.Decisions => ZIO.none
             case orchestration.EvidenceFilterMode.Llm =>
               for
                 transport <- orchestration.BedrockLlmTransport.make
@@ -162,8 +163,8 @@ object Main extends ZIOAppDefault:
             initialInputSchema,
             operationInvoker,
             orchestration.OrchestrationConfig(
-              jevTurnRetries = 2,
-              jevFilterVariantThreshold = 1024,
+              decisionTurnRetries = 2,
+              decisionFilterVariantThreshold = 1024,
             ),
             tracker.metrics,
             filterMode = filterMode,
@@ -171,7 +172,7 @@ object Main extends ZIOAppDefault:
           ).provideLayer(invocationJevLayer)
           _ <- nestedRuns.update(_ :+ nested)
         yield DynamicToolResult(List(ToolResultBlock.json[Json](Json.Obj("evidence" -> nested.evidence))))
-      }.maxIterations(6).text).provideSomeLayer[HttpClient](Converse.configured ++ TypeSafeAI.Client.live)
+      }.maxIterations(6).text).provideSomeLayer[HttpClient](Converse.configured ++ TypeSafe.live)
       finished <- Clock.nanoTime
       runs <- nestedRuns.get
       _ <- printMetrics(result, s"jev-tool:$filterModeName")
@@ -187,17 +188,17 @@ object Main extends ZIOAppDefault:
   private def jevLoopProgram(mode: orchestration.OrchestrationMode) = ZIO.scoped:
     for
       fullBodies <- zio.System.env("JEV_FULL_EXCHANGE_LOGS").map(_.contains("true"))
-      tracker <- orchestration.JevPhysicalTracker.make
+      tracker <- orchestration.DecisionPhysicalTracker.make
       started <- Clock.nanoTime
       mcp <- McpClient.connect(McpUrl)
       definitions <- mcp.listTools
       catalog <- orchestration.McpCatalog.fromDefinitions(definitions)
       operationInvoker <- orchestration.McpOperationInvoker.fromClient(definitions, mcp)
-      exchangeLogger = orchestration.JevExchangeLogger.selected(fullBodies)
-      combinedObserver = TypeSafeAI.ExchangeObserver.fromFunction(observation =>
+      exchangeLogger = orchestration.ExchangeLogger.selected(fullBodies)
+      combinedObserver = Decisions.ExchangeObserver.fromFunction(observation =>
         exchangeLogger.observe(observation) *> tracker.observer.observe(observation)
       )
-      jevLayer = TypeSafeAI.Client.live >>> TypeSafeAI.Client.observed(combinedObserver)
+      jevLayer = TypeSafe.live >>> DecisionModel.observed(combinedObserver)
       result <- (for
         transport <- orchestration.BedrockLlmTransport.make
         internalLlm <- orchestration.InternalLlmInvoker.make(transport)
@@ -208,8 +209,8 @@ object Main extends ZIOAppDefault:
           internalLlm,
           mode,
           orchestration.OrchestrationConfig(
-            jevTurnRetries = 2,
-            jevFilterVariantThreshold = if mode.forceLlmFilters then 0 else 1024,
+            decisionTurnRetries = 2,
+            decisionFilterVariantThreshold = if mode.forceLlmFilters then 0 else 1024,
           ),
           tracker.metrics,
         )
@@ -231,8 +232,8 @@ object Main extends ZIOAppDefault:
   def run = (ZIOAppArgs.getArgs.flatMap:
     case Chunk("llm-loop")                => llmLoopProgram
     case Chunk("original")                => llmLoopProgram
-    case Chunk("jev-tool")                => jevToolProgram(orchestration.EvidenceFilterMode.Jev)
-    case Chunk("jev-tool", "jev-filters")  => jevToolProgram(orchestration.EvidenceFilterMode.Jev)
+    case Chunk("jev-tool")                => jevToolProgram(orchestration.EvidenceFilterMode.Decisions)
+    case Chunk("jev-tool", "jev-filters")  => jevToolProgram(orchestration.EvidenceFilterMode.Decisions)
     case Chunk("jev-tool", "llm-filters")  => jevToolProgram(orchestration.EvidenceFilterMode.Llm)
     case Chunk("jev-loop")                            => jevLoopProgram(orchestration.OrchestrationMode.Plan)
     case Chunk("jev-loop", "plan")                    => jevLoopProgram(orchestration.OrchestrationMode.Plan)

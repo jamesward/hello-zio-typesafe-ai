@@ -1,7 +1,7 @@
-package com.jamesward.zio_typesafe_ai.orchestration
+package com.jamesward.zio_decisions.orchestration
 
-import com.jamesward.zio_typesafe_ai.orchestration.model.*
-import com.jamesward.zio_typesafe_ai.orchestration.runtime.*
+import com.jamesward.zio_decisions.orchestration.model.*
+import com.jamesward.zio_decisions.orchestration.runtime.*
 import zio.*
 import zio.json.*
 import zio.json.ast.Json

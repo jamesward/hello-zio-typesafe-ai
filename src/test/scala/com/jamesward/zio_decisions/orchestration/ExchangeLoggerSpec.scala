@@ -1,12 +1,12 @@
-package com.jamesward.zio_typesafe_ai.orchestration
+package com.jamesward.zio_decisions.orchestration
 
-import com.jamesward.zio_typesafe_ai.TypeSafeAI
+import com.jamesward.zio_decisions.Decisions
 import zio.*
 import zio.json.*
 import zio.json.ast.Json
 import zio.test.*
 
-object JevExchangeLoggerSpec extends ZIOSpecDefault:
+object ExchangeLoggerSpec extends ZIOSpecDefault:
   private val forbidden = Set(
     "schema", "itemSchema", "targetInputSchema", "properties",
   )
@@ -190,7 +190,7 @@ object JevExchangeLoggerSpec extends ZIOSpecDefault:
 
   def spec = suite("compact Jev exchange logger")(
     test("compacts current generic plan state and Choice options by allow-list") {
-      val compact = JevExchangeLogger.compactRequest(planRequest)
+      val compact = ExchangeLogger.compactRequest(planRequest)
       assertTrue(
         at(compact, "model").contains(Json.Str("jev-latest")),
         at(compact, "state", "prompt").contains(Json.Str("Find the API")),
@@ -221,7 +221,7 @@ object JevExchangeLoggerSpec extends ZIOSpecDefault:
       )
     },
     test("compacts generic no-plan checkpoint and filter recovery") {
-      val compact = JevExchangeLogger.compactRequest(noPlanRequest)
+      val compact = ExchangeLogger.compactRequest(noPlanRequest)
       assertTrue(
         at(compact, "state", "prompt").contains(Json.Str("Find JSON types")),
         at(compact, "state", "confirmedActions").contains(
@@ -255,7 +255,7 @@ object JevExchangeLoggerSpec extends ZIOSpecDefault:
       )
     },
     test("preserves Noul, Choice, Score, complete distributions, legend, and usage") {
-      val compact = JevExchangeLogger.compactResponse(response)
+      val compact = ExchangeLogger.compactResponse(response)
       assertTrue(
         at(compact, "model").contains(Json.Str("jev-latest")),
         at(compact, "answers", "isReady").contains(Json.Obj(
@@ -281,20 +281,20 @@ object JevExchangeLoggerSpec extends ZIOSpecDefault:
     test("emits one-line compact success and failure records") {
       for
         before <- ZTestLogger.logOutput.map(_.size)
-        _ <- JevExchangeLogger.compact.observe(TypeSafeAI.ExchangeObservation(
+        _ <- ExchangeLogger.compact.observe(Decisions.ExchangeObservation(
           planRequest,
-          TypeSafeAI.ExchangeOutcome.Success(response),
+          Decisions.ExchangeOutcome.Success(response),
           12L,
         ))
-        _ <- JevExchangeLogger.compact.observe(TypeSafeAI.ExchangeObservation(
+        _ <- ExchangeLogger.compact.observe(Decisions.ExchangeObservation(
           noPlanRequest,
-          TypeSafeAI.ExchangeOutcome.Failure(Cause.fail(TypeSafeAI.Error.RateLimit("retry\nlater"))),
+          Decisions.ExchangeOutcome.Failure(Cause.fail(Decisions.Error.RateLimit("retry\nlater"))),
           15L,
         ))
         output <- ZTestLogger.logOutput.map(_.drop(before).map(_.message()))
       yield assertTrue(
         output.size == 2,
-        output.forall(_.contains("Jev compact exchange")),
+        output.forall(_.contains("Decision compact exchange")),
         output.forall(message => !message.contains("TypeSafe AI compact exchange")),
         output.head.contains("request="),
         output.head.contains("response="),
@@ -324,7 +324,7 @@ object JevExchangeLoggerSpec extends ZIOSpecDefault:
           "item_1" -> Json.Obj("type" -> Json.Str("noul"), "instructions" -> Json.Str("second")),
         ),
       )
-      val compact = JevExchangeLogger.compactRequest(request)
+      val compact = ExchangeLogger.compactRequest(request)
       assertTrue(
         at(compact, "state", "filterMode").contains(Json.Str("variant_relevance")),
         at(compact, "state", "variantsCount").contains(Json.Num(2)),
@@ -352,17 +352,17 @@ object JevExchangeLoggerSpec extends ZIOSpecDefault:
         ),
         "questions" -> untrusted,
       )
-      val compact = JevExchangeLogger.compactRequest(malformed)
+      val compact = ExchangeLogger.compactRequest(malformed)
       assertTrue(
         at(compact, "model").isEmpty,
         at(compact, "state", "confirmedActions").contains(Json.Arr()),
         at(compact, "questions").contains(Json.Obj()),
         forbidden.intersect(keys(compact)).isEmpty,
         !compact.toJson.contains("secret"),
-        JevExchangeLogger.compactRequest(Json.Str("bad")) == Json.Obj(),
-        JevExchangeLogger.compactResponse(Json.Arr()) == Json.Obj(),
-        JevExchangeLogger.selected(false) eq JevExchangeLogger.compact,
-        JevExchangeLogger.selected(true) eq com.jamesward.zio_typesafe_ai.TypeSafeAI.ExchangeObserver.logging,
+        ExchangeLogger.compactRequest(Json.Str("bad")) == Json.Obj(),
+        ExchangeLogger.compactResponse(Json.Arr()) == Json.Obj(),
+        ExchangeLogger.selected(false) eq ExchangeLogger.compact,
+        ExchangeLogger.selected(true) eq com.jamesward.zio_decisions.Decisions.ExchangeObserver.logging,
       )
     },
   )

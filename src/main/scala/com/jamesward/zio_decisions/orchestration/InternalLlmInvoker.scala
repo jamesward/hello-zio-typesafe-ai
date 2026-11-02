@@ -1,4 +1,4 @@
-package com.jamesward.zio_typesafe_ai.orchestration
+package com.jamesward.zio_decisions.orchestration
 
 import com.jamesward.zio_bedrock.Bedrock
 import com.jamesward.zio_bedrock.Bedrock.*

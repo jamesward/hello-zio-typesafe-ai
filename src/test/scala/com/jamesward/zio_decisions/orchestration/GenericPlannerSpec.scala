@@ -1,7 +1,7 @@
-package com.jamesward.zio_typesafe_ai.orchestration
+package com.jamesward.zio_decisions.orchestration
 
 import com.jamesward.ziohttp.mcp.{ToolDefinition, ToolName}
-import com.jamesward.zio_typesafe_ai.orchestration.model.*
+import com.jamesward.zio_decisions.orchestration.model.*
 import zio.*
 import zio.json.*
 import zio.json.ast.Json
@@ -265,13 +265,13 @@ object GenericPlannerSpec extends ZIOSpecDefault:
     },
     test("Jev retries are opt-in and choice guidance is not duplicated in state") {
       val defaults = OrchestrationConfig()
-      val optedIn = OrchestrationConfig(jevTurnRetries = 2)
+      val optedIn = OrchestrationConfig(decisionTurnRetries = 2)
       val state = GenericPlanner.stateView(GenericPlanner.initial("generic request", Vector.empty))
       assertTrue(
-        defaults.jevTurnRetries == 0,
+        defaults.decisionTurnRetries == 0,
         defaults.hostGuard == 12,
-        defaults.jevFilterVariantThreshold == 255,
-        optedIn.jevTurnRetries == 2,
+        defaults.decisionFilterVariantThreshold == 255,
+        optedIn.decisionTurnRetries == 2,
         state.get("instruction").isEmpty,
       )
     },

@@ -1,8 +1,8 @@
-package com.jamesward.zio_typesafe_ai.orchestration
+package com.jamesward.zio_decisions.orchestration
 
-import com.jamesward.zio_typesafe_ai.{AppTypeSafeAIMock, TypeSafeAI}
+import com.jamesward.zio_decisions.{AppTypeSafeMock, Decisions}
 import com.jamesward.ziohttp.mcp.{CallToolResult, ToolContent, ToolDefinition, ToolName}
-import com.jamesward.zio_typesafe_ai.orchestration.model.*
+import com.jamesward.zio_decisions.orchestration.model.*
 import zio.*
 import zio.json.ast.Json
 import zio.test.*
@@ -168,7 +168,7 @@ object GenericOrchestratorSpec extends ZIOSpecDefault:
         )
     },
     test("audited Jev planning propagates snapshots without changing existing result fields") {
-      val operations = new _root_.com.jamesward.zio_typesafe_ai.orchestration.runtime.OperationInvoker:
+      val operations = new _root_.com.jamesward.zio_decisions.orchestration.runtime.OperationInvoker:
         def call(operation: String, arguments: Json.Obj): Task[Json] =
           ZIO.succeed(Json.Obj("sessionId" -> Json.Str("s-audit")))
 
@@ -186,8 +186,8 @@ object GenericOrchestratorSpec extends ZIOSpecDefault:
           operations,
           llm,
           OrchestrationConfig(maxOperations = 1, maxIterations = 3),
-          TypeSafeAI.LoopObserver.none,
-        ).provideLayer(AppTypeSafeAIMock.choices("c000", "c000", "c000"))
+          Decisions.LoopObserver.none,
+        ).provideLayer(AppTypeSafeMock.choices("c000", "c000", "c000"))
       yield assertTrue(
         result.finalText == "audited answer",
         result.planningTurns.size == 3,

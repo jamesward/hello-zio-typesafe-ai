@@ -1,18 +1,18 @@
-package com.jamesward.zio_typesafe_ai
+package com.jamesward.zio_decisions
 
-import com.jamesward.zio_typesafe_ai.TypeSafeAI.{Client, Error, ModelId}
-import com.jamesward.zio_typesafe_ai.internal.Wire
+import com.jamesward.zio_decisions.Decisions.{Error, ModelId}
+import com.jamesward.zio_decisions.typesafe.{TypeSafe, Wire}
 import zio.*
 
 import scala.collection.immutable.Queue
 
-object AppTypeSafeAIMock:
-  def choices(values: String*): ULayer[Client] =
+object AppTypeSafeMock:
+  private val modelId: ModelId = ModelId("app-test")
+
+  def choices(values: String*): ULayer[DecisionModel] =
     ZLayer.fromZIO:
       Ref.make(Queue.from(values)).map: pending =>
-        new Client:
-          val modelId: ModelId = ModelId("app-test")
-
+        TypeSafe.model(new TypeSafe.Transport:
           def send(request: Wire.SystemOneRequest): IO[Error, Wire.SystemOneResponse] =
             pending.modify: queue =>
               queue.dequeueOption match
@@ -32,18 +32,18 @@ object AppTypeSafeAIMock:
               case None =>
                 ZIO.fail(Error.Unexpected(
                   zio.http.Status.InternalServerError,
-                  "App TypeSafeAI mock script exhausted",
+                  "App TypeSafe mock script exhausted",
                 ))
+        , modelId)
 
-  case class Observed(layer: ULayer[Client], requestBodies: UIO[Vector[zio.json.ast.Json]])
+  case class Observed(layer: ULayer[DecisionModel], requestBodies: UIO[Vector[zio.json.ast.Json]])
 
   def choicesObserved(values: String*): UIO[Observed] =
     for
       pending <- Ref.make(Queue.from(values))
       seen <- Ref.make(Vector.empty[Wire.SystemOneRequest])
     yield Observed(
-      ZLayer.succeed(new Client:
-        val modelId: ModelId = ModelId("app-test")
+      ZLayer.succeed(TypeSafe.model(new TypeSafe.Transport:
         def send(request: Wire.SystemOneRequest): IO[Error, Wire.SystemOneResponse] =
           seen.update(_ :+ request) *> pending.modify: queue =>
             queue.dequeueOption match
@@ -55,8 +55,8 @@ object AppTypeSafeAIMock:
               answers = Map("next_action" -> Wire.Answer.Choice(choice, Map(choice -> 1.0), 1.0)),
               usage = Wire.Usage(1, 1),
             ))
-            case None => ZIO.fail(Error.Unexpected(zio.http.Status.InternalServerError, "App TypeSafeAI mock script exhausted"))
-      ),
+            case None => ZIO.fail(Error.Unexpected(zio.http.Status.InternalServerError, "App TypeSafe mock script exhausted"))
+      , modelId)),
       seen.get.map(_.map(_.body)),
     )
   enum ScriptedResponse:
@@ -68,8 +68,7 @@ object AppTypeSafeAIMock:
       pending <- Ref.make(Queue.from(responses))
       seen <- Ref.make(Vector.empty[Wire.SystemOneRequest])
     yield Observed(
-      ZLayer.succeed(new Client:
-        val modelId: ModelId = ModelId("app-test")
+      ZLayer.succeed(TypeSafe.model(new TypeSafe.Transport:
         def send(request: Wire.SystemOneRequest): IO[Error, Wire.SystemOneResponse] =
           seen.update(_ :+ request) *> pending.modify: queue =>
             queue.dequeueOption match
@@ -86,8 +85,8 @@ object AppTypeSafeAIMock:
               answers = probabilities.zipWithIndex.map((probability, index) => s"item_$index" -> Wire.Answer.Noul(probability)).toMap,
               usage = Wire.Usage(probabilities.size, probabilities.size),
             ))
-            case None => ZIO.fail(Error.Unexpected(zio.http.Status.InternalServerError, "App TypeSafeAI mock script exhausted"))
-      ),
+            case None => ZIO.fail(Error.Unexpected(zio.http.Status.InternalServerError, "App TypeSafe mock script exhausted"))
+      , modelId)),
       seen.get.map(_.map(_.body)),
     )
 
@@ -95,8 +94,7 @@ object AppTypeSafeAIMock:
     for
       seen <- Ref.make(Vector.empty[Wire.SystemOneRequest])
     yield Observed(
-      ZLayer.succeed(new Client:
-        val modelId: ModelId = ModelId("app-test")
+      ZLayer.succeed(TypeSafe.model(new TypeSafe.Transport:
         def send(request: Wire.SystemOneRequest): IO[Error, Wire.SystemOneResponse] =
           val questionIds = request.body.asObject.flatMap(_.get("questions")).flatMap(_.asObject)
             .map(_.fields.map(_._1).toVector).getOrElse(Vector.empty)
@@ -108,7 +106,7 @@ object AppTypeSafeAIMock:
             .toMap,
             usage = Wire.Usage(questionIds.size, questionIds.size),
           ))
-      ),
+      , modelId)),
       seen.get.map(_.map(_.body)),
     )
 
@@ -116,8 +114,7 @@ object AppTypeSafeAIMock:
     for
       seen <- Ref.make(Vector.empty[Wire.SystemOneRequest])
     yield Observed(
-      ZLayer.succeed(new Client:
-        val modelId: ModelId = ModelId("app-test")
+      ZLayer.succeed(TypeSafe.model(new TypeSafe.Transport:
         def send(request: Wire.SystemOneRequest): IO[Error, Wire.SystemOneResponse] =
           val questionIds = request.body.asObject.flatMap(_.get("questions")).flatMap(_.asObject)
             .map(_.fields.map(_._1).toVector).getOrElse(Vector.empty)
@@ -129,6 +126,6 @@ object AppTypeSafeAIMock:
             .toMap,
             usage = Wire.Usage(questionIds.size, questionIds.size),
           ))
-      ),
+      , modelId)),
       seen.get.map(_.map(_.body)),
     )

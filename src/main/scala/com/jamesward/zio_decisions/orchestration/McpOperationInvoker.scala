@@ -1,8 +1,8 @@
-package com.jamesward.zio_typesafe_ai.orchestration
+package com.jamesward.zio_decisions.orchestration
 
 import com.jamesward.ziohttp.mcp.{CallToolResult, ToolContent, ToolDefinition}
 import com.jamesward.ziohttp.mcp.client.McpClient
-import com.jamesward.zio_typesafe_ai.orchestration.runtime.OperationInvoker
+import com.jamesward.zio_decisions.orchestration.runtime.OperationInvoker
 import zio.*
 import zio.json.*
 import zio.json.ast.Json
@@ -38,9 +38,9 @@ object McpOrchestrator:
     internalLlm: InternalLlmInvoker,
     mode: OrchestrationMode,
     config: OrchestrationConfig = OrchestrationConfig(),
-    physicalMetrics: UIO[JevPhysicalMetrics] = ZIO.succeed(JevPhysicalMetrics()),
-    planningObserver: com.jamesward.zio_typesafe_ai.TypeSafeAI.LoopObserver[GenericPlanner.PlanningError, model.Workflow] = GenericPlanner.semanticLoggingObserver,
-  ): ZIO[com.jamesward.zio_typesafe_ai.TypeSafeAI.Client, Throwable, OrchestrationResult] =
+    physicalMetrics: UIO[DecisionPhysicalMetrics] = ZIO.succeed(DecisionPhysicalMetrics()),
+    planningObserver: com.jamesward.zio_decisions.Decisions.LoopObserver[GenericPlanner.PlanningError, model.Workflow] = GenericPlanner.semanticLoggingObserver,
+  ): ZIO[com.jamesward.zio_decisions.DecisionModel, Throwable, OrchestrationResult] =
     McpCatalog.fromDefinitions(definitions).flatMap(catalog =>
       GenericOrchestrator.runMode(prompt, catalog, operationInvoker, internalLlm, mode, config, physicalMetrics, planningObserver)
     )
